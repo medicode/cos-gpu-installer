@@ -24,6 +24,16 @@ steps:
   - '-t'
   - 'gcr.io/${_PROJECT_ID}/cos-gpu-installer:${TAG_NAME}'
   - 'cos-gpu-installer-docker/'
+- name: 'us.gcr.io/cloud-builders/docker'
+  args:
+  - 'build'
+  - '-t'
+  - 'us.gcr.io/${_PROJECT_ID}/cos-gpu-installer:latest'
+  - '-t'
+  - 'us.gcr.io/${_PROJECT_ID}/cos-gpu-installer:${TAG_NAME}'
+  - 'cos-gpu-installer-docker/'
 images:
 - 'gcr.io/${_PROJECT_ID}/cos-gpu-installer:latest'
 - 'gcr.io/${_PROJECT_ID}/cos-gpu-installer:${TAG_NAME}'
+- 'us.gcr.io/${_PROJECT_ID}/cos-gpu-installer:latest'
+- 'us.gcr.io/${_PROJECT_ID}/cos-gpu-installer:${TAG_NAME}'
