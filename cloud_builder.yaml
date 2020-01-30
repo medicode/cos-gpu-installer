@@ -20,6 +20,8 @@ steps:
     dir: cos-gpu-installer-docker
     waitFor: ["-"]
 
+logsBucket: fathom-containers-cloud-build-logs-36tugmiz
+
 images:
   - gcr.io/$PROJECT_ID/cos-gpu-installer
   - us.gcr.io/$PROJECT_ID/cos-gpu-installer
