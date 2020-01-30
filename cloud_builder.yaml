@@ -10,7 +10,7 @@ steps:
     dir: cos-gpu-installer-docker
     waitFor: ["-"]
 
-  - id: us.cos-gpu-installer
+  - id: us-cos-gpu-installer
     name: "gcr.io/cloud-builders/docker"
     args: ["build", "-t", "us.gcr.io/$PROJECT_ID/cos-gpu-installer:latest", "."]
     dir: cos-gpu-installer-docker
