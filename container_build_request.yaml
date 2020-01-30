@@ -25,5 +25,5 @@ steps:
   - 'gcr.io/${_PROJECT_ID}/cos-gpu-installer:${TAG_NAME}'
   - 'cos-gpu-installer-docker/'
 images:
-- 'us.gcr.io/${_PROJECT_ID}/cos-gpu-installer:latest'
-- 'us.gcr.io/${_PROJECT_ID}/cos-gpu-installer:${TAG_NAME}'
+- 'gcr.io/${_PROJECT_ID}/cos-gpu-installer:latest'
+- 'gcr.io/${_PROJECT_ID}/cos-gpu-installer:${TAG_NAME}'
