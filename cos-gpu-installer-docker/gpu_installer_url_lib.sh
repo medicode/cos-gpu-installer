@@ -26,7 +26,7 @@ get_minor_version() {
 
 get_download_location() {
   # projects/000000000000/zones/us-west1-a -> us
-  local -r instance_location="$(curl -sfS "http://metadata.google.internal/computeMetadata/v1/instance/zone" -H "Metadata-Flavor: Google" | cut -d '/' -f4 | cut -d '-' -f1)"
+  local -r instance_location="$(curl --http1.1 -sfS "http://metadata.google.internal/computeMetadata/v1/instance/zone" -H "Metadata-Flavor: Google" | cut -d '/' -f4 | cut -d '-' -f1)"
   declare -A location_mapping
   location_mapping=( ["us"]="us" ["asia"]="asia" ["europe"]="eu" )
   # Use us as default download location.
@@ -53,14 +53,15 @@ default_installer_download_url() {
   if (( "${major_version}" < 390 )); then
     # Versions prior to 390 are downloaded from the upstream location.
     echo "https://us.download.nvidia.com/tesla/${driver_version}/NVIDIA-Linux-x86_64-${driver_version}.run"
-  elif (( "${major_version}" == 390 )); then
-    # The naming format changed after version 390.
+  elif (( "${major_version}" == 390 )) && (( "${minor_version}" == 46 )); then
+    # 390.46 is the only version residing in the TESLSA/ dir
     echo "https://storage.googleapis.com/nvidia-drivers-${download_location}-public/TESLA/NVIDIA-Linux-x86_64-${driver_version}.run"
-  elif (( "${major_version}" >= 396 )) && (( "${minor_version}" >= 37 )); then
-    # Apparently the naming format changed again starting since 396.37.
-    echo "https://storage.googleapis.com/nvidia-drivers-${download_location}-public/tesla/${driver_version}/NVIDIA-Linux-x86_64-${driver_version}.run"
-  else
+  elif (( "${major_version}" == 396 )) && (( "${minor_version}" == 26 )); then
+    # Different naming format for 396.26 including the -dignostic keyword.
     echo "https://storage.googleapis.com/nvidia-drivers-${download_location}-public/tesla/${driver_version}/NVIDIA-Linux-x86_64-${driver_version}-diagnostic.run"
+  else
+    # All other versions available in the gs conform to this naming convention.
+    echo "https://storage.googleapis.com/nvidia-drivers-${download_location}-public/tesla/${driver_version}/NVIDIA-Linux-x86_64-${driver_version}.run"
   fi
 }
 
@@ -68,7 +69,7 @@ get_gpu_installer_url() {
   if [[ -z "${GPU_INSTALLER_DOWNLOAD_URL}" ]]; then
     # First try to find the precompiled gpu installer.
     local -r url="$(precompiled_installer_download_url "$@")"
-    if curl -s -I "${url}"  2>&1 | grep -q 'HTTP/2 200'; then
+    if curl --http1.1 -s -I "${url}"  2>&1 | grep -q 'HTTP/2 200'; then
       GPU_INSTALLER_DOWNLOAD_URL="${url}"
     else
       # Fallback to default gpu installer.
