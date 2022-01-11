@@ -328,12 +328,7 @@ install_cross_toolchain_pkg() {
       return ${RETCODE_ERROR}
     fi
 
-    # Don't unpack Rust toolchain elements because they are not needed and they
-    # use a lot of disk space.
-    tar xf "${pkg_name}" \
-      --exclude='./usr/lib64/rustlib*' \
-      --exclude='./lib/librustc*' \
-      --exclude='./usr/lib64/librustc*'
+    tar xf "${pkg_name}"
     rm "${pkg_name}"
     popd
   fi
