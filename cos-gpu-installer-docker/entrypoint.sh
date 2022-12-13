@@ -22,10 +22,8 @@ set -u
 set -x
 COS_KERNEL_INFO_FILENAME="kernel_info"
 COS_KERNEL_SRC_HEADER="kernel-headers.tgz"
-TOOLCHAIN_URL_FILENAME="toolchain_url"
 TOOLCHAIN_ENV_FILENAME="toolchain_env"
 TOOLCHAIN_PKG_DIR="${TOOLCHAIN_PKG_DIR:-/build/cos-tools}"
-CHROMIUMOS_SDK_GCS="https://storage.googleapis.com/chromiumos-sdk"
 ROOT_OS_RELEASE="${ROOT_OS_RELEASE:-/root/etc/os-release}"
 KERNEL_SRC_HEADER="${KERNEL_SRC_HEADER:-/build/usr/src/linux}"
 NVIDIA_DRIVER_VERSION="${NVIDIA_DRIVER_VERSION:-418.67}"
@@ -58,6 +56,9 @@ INSTALLER_FILE=""
 
 # Preload driver independent components. Set in parse_opt()
 PRELOAD="${PRELOAD:-false}"
+
+# Precompile a driver. Set in parse_opt()
+PRECOMPILE="${PRECOMPILE:-false}"
 
 source gpu_installer_url_lib.sh
 
@@ -238,6 +239,14 @@ download_kernel_headers() {
     rm -r usr
     popd
   fi
+  local -r toolchain_kernel_headers="${TOOLCHAIN_PKG_DIR}/usr/src/linux-headers-$(uname -r)"
+  if [[ ! -d "${toolchain_kernel_headers}" ]]; then
+    info "Copying kernel headers to ${toolchain_kernel_headers}"
+    mkdir -p "${toolchain_kernel_headers}"
+    pushd "${toolchain_kernel_headers}"
+    cp -r "${KERNEL_SRC_HEADER}"/* .
+    popd
+  fi
 }
 
 # Gets default service account credentials of the VM which cos-gpu-installer runs in.
@@ -288,28 +297,15 @@ download_content_from_url() {
   return ${RETCODE_SUCCESS}
 }
 
-# Get the toolchain from Chromiumos GCS bucket when
-# toolchain tarball is not found in COS GCS bucket.
+# Calculate address of the toolchain package.
 get_cross_toolchain_pkg() {
-  # First, check if the toolchain path is available locally.
-  local -r tc_path_file="${ROOT_MOUNT_DIR}/etc/toolchain-path"
-  if [[ -f "${tc_path_file}" ]]; then
-    info "Found toolchain path file locally"
-    local -r tc_path="$(cat "${tc_path_file}")"
-    local -r download_url="${CHROMIUMOS_SDK_GCS}/${tc_path}"
-  else
-    # Next, check if the toolchain path is available in GCS.
-    local -r tc_path_url="${COS_DOWNLOAD_GCS}/${TOOLCHAIN_URL_FILENAME}"
-    info "Obtaining toolchain download URL from ${tc_path_url}"
-    local -r download_url="$(curl --http1.1 -sfS "${tc_path_url}")"
-  fi
-  echo "${download_url}"
+  echo "${COS_DOWNLOAD_GCS}/toolchain.tar.xz"
 }
 
 # Download, extracts and install the toolchain package
 install_cross_toolchain_pkg() {
   info "$TOOLCHAIN_PKG_DIR: $(ls -A "${TOOLCHAIN_PKG_DIR}")"
-  if [[ -n "$(ls -A "${TOOLCHAIN_PKG_DIR}")" ]]; then
+  if [[ -n "$(ls -A "${TOOLCHAIN_PKG_DIR}/bin")" ]]; then
     info "Found existing toolchain package. Skipping download and installation"
     if mountpoint -q "${TOOLCHAIN_PKG_DIR}"; then
       info "${TOOLCHAIN_PKG_DIR} is a mountpoint; remounting as exec"
@@ -410,7 +406,7 @@ configure_nvidia_installation_dirs() {
   update_container_ld_cache
 
   # Install an exit handler to cleanup the overlayfs mount points.
-  trap "{ umount /lib/modules/\"$(uname -r)\"/video; umount /usr/lib/x86_64-linux-gnu ; umount /usr/bin; }" EXIT
+  trap "{ umount /lib/modules/\"$(uname -r)\"/video; umount -fl /usr/lib/x86_64-linux-gnu ; umount /usr/bin; }" EXIT
   popd
 }
 
@@ -429,11 +425,23 @@ run_nvidia_installer() {
     installer_args+=("--kernel-source-path=${KERNEL_SRC_HEADER}")
   fi
 
-  local -r dir_to_extract="/tmp/extract"
-  # Extract files to a fixed path first to make sure md5sum of generated gpu
-  # drivers are consistent.
-  sh "${INSTALLER_FILE}" -x --target "${dir_to_extract}"
-  "${dir_to_extract}/nvidia-installer" "${installer_args[@]}"
+  if [[ "${PRECOMPILE}" == "true" ]]; then
+    installer_args+=("--kernel-name=$(uname -r)")
+    installer_args+=("--add-this-kernel")
+    # Cannot precompile the driver with the extracted binray.
+    # It's OK that the .ko file can be different every time we install
+    # the driver, because we only need to install the driver once to get
+    # the precompiled driver. After that, the .ko files compressed in
+    # the precompiled driver will be signed and used.
+    sh "${INSTALLER_FILE}" "${installer_args[@]}"
+    info "Precompiled driver: $(ls *-custom.run)"
+  else
+    local -r dir_to_extract="/tmp/extract"
+    # Extract files to a fixed path first to make sure md5sum of generated gpu
+    # drivers are consistent.
+    sh "${INSTALLER_FILE}" -x --target "${dir_to_extract}"
+    "${dir_to_extract}/nvidia-installer" "${installer_args[@]}"
+  fi
 
   popd
 }
@@ -475,7 +483,7 @@ usage() {
 }
 
 parse_opt() {
-  while getopts ":ph" opt; do
+  while getopts ":phc" opt; do
   case ${opt} in
     p)
       PRELOAD="true"
@@ -483,6 +491,9 @@ parse_opt() {
     h)
       usage
       exit 0
+      ;;
+    c)
+      PRECOMPILE="true"
       ;;
     \?)
       echo "Invalid option: -$OPTARG" >&2
@@ -496,6 +507,7 @@ parse_opt() {
 main() {
   parse_opt "$@"
   info "PRELOAD: ${PRELOAD}"
+  info "PRECOMPILE: ${PRECOMPILE}"
   load_etc_os_release
   set_cos_download_gcs
   if [[ "$PRELOAD" == "true" ]]; then
@@ -522,10 +534,14 @@ main() {
       configure_nvidia_installation_dirs
       run_nvidia_installer
       update_cached_version
-      verify_nvidia_installation
-      info "Finished installing the drivers."
+      if [[ ${PRECOMPILE} != "true" ]]; then
+        verify_nvidia_installation
+        info "Finished installing the drivers."
+      fi
     fi
-    update_host_ld_cache
+    if [[ ${PRECOMPILE} != "true" ]]; then
+      update_host_ld_cache
+    fi
   fi
 }
 
