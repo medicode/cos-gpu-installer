@@ -406,7 +406,7 @@ configure_nvidia_installation_dirs() {
   update_container_ld_cache
 
   # Install an exit handler to cleanup the overlayfs mount points.
-  trap "{ umount /lib/modules/\"$(uname -r)\"/video; umount -fl /usr/lib/x86_64-linux-gnu ; umount /usr/bin; echo "nvidia logs are here" && cat $NVIDIA_INSTALL_DIR_CONTAINER/log/nvidia-installer.log; echo "Sleeping for ten minutes" && sleep 600;}" EXIT
+  trap "{ umount /lib/modules/\"$(uname -r)\"/video; umount -fl /usr/lib/x86_64-linux-gnu ; umount /usr/bin; echo \"NVIDIA ERROR LOGS:\" && cat $NVIDIA_INSTALL_DIR_CONTAINER/log/nvidia-installer.log; echo \"Sleeping for ten minutes\" && sleep 600;}" EXIT
   popd
 }
 
